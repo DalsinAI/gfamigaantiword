@@ -1,0 +1,10 @@
+# What this port builds on: fetched at build time, never shipped.
+# Antiword (GPL-2.0) 0.37 with the maintained fixes, grobian/antiword main
+# 82515aa (3 Jun 2026; the original site is gone, see its README)
+AW_GIT=https://github.com/grobian/antiword.git
+AW_COMMIT=82515aad16ceedc1061ae3777acb99c90d3d3e08
+AW_VERSION=0.37
+# Our own pieces, fetched at these commits
+# fpuauto (common/fpuauto): the FPU when there is one
+FPA_REPO=https://github.com/DalsinAI/amicradle-guest
+FPA_COMMIT=4a784c84b878fe0e9abade7006e67e1ded9b165c
