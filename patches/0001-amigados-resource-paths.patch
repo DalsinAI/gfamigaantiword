@@ -1,0 +1,146 @@
+diff -ru -x .git antiword/antiword.h aw-edit/antiword.h
+--- a/antiword.h	2026-11-16 21:52:49.646187127 +0000
++++ b/antiword.h	2026-11-16 21:54:54.062725952 +0000
+@@ -196,7 +196,9 @@
+ #define ANTIWORD_DIR		"antiword"
+ #define FONTNAMES_FILE		"fontname.txt"
+ #elif defined(__amigaos)
+-#define GLOBAL_ANTIWORD_DIR	"SYS:.antiword"
++/* GFOS: the mapping files and fontnames live in SYS:Utilities/Antiword;
++ * ANTIWORDHOME (an AmigaDOS path) and HOME/.antiword are tried first */
++#define GLOBAL_ANTIWORD_DIR	"SYS:Utilities/Antiword"
+ #define ANTIWORD_DIR		".antiword"
+ #define FONTNAMES_FILE		"fontnames"
+ #elif defined(N_PLAT_NLM)
+@@ -255,6 +257,12 @@
+ 
+ /* Prototypes */
+ 
++#if defined(__amigaos)
++/* amiga/aw_path.c: "dir" + "name" as AmigaDOS joins them ("Work:" +
++ * "x" is "Work:x", "Work:a" + "x" is "Work:a/x"); FALSE when too long */
++extern BOOL	bAmigaJoin(char *, size_t, const char *, const char *);
++#endif /* __amigaos */
++
+ /* asc85enc.c */
+ extern void	vASCII85EncodeByte(FILE *, int);
+ extern void	vASCII85EncodeArray(FILE *, FILE *, size_t);
+diff -ru -x .git antiword/fonts_u.c aw-edit/fonts_u.c
+--- a/fonts_u.c	2026-11-16 21:52:49.646187127 +0000
++++ b/fonts_u.c	2026-11-16 21:54:54.063314886 +0000
+@@ -34,6 +34,46 @@
+ 	szEnvironmentFile[0] = '\0';
+ 	szLocalFile[0] = '\0';
+ 
++#if defined(__amigaos)
++	/* AmigaDOS paths: ANTIWORDHOME, HOME/.antiword, then the global one */
++	{
++		char	szDir[PATH_MAX+1];
++		char	szGlobal[PATH_MAX+1];
++
++		szAntiword = szGetAntiwordDirectory();
++		if (szAntiword != NULL && szAntiword[0] != '\0' &&
++		    bAmigaJoin(szEnvironmentFile, sizeof(szEnvironmentFile),
++				szAntiword, FONTNAMES_FILE)) {
++			DBG_MSG(szEnvironmentFile);
++			pFile = fopen(szEnvironmentFile, "r");
++			if (pFile != NULL) {
++				return pFile;
++			}
++		}
++		szHome = szGetHomeDirectory();
++		if (szHome[0] != '\0' &&
++		    bAmigaJoin(szDir, sizeof(szDir), szHome, ANTIWORD_DIR) &&
++		    bAmigaJoin(szLocalFile, sizeof(szLocalFile),
++				szDir, FONTNAMES_FILE)) {
++			DBG_MSG(szLocalFile);
++			pFile = fopen(szLocalFile, "r");
++			if (pFile != NULL) {
++				return pFile;
++			}
++		}
++		(void)bAmigaJoin(szGlobal, sizeof(szGlobal),
++				GLOBAL_ANTIWORD_DIR, FONTNAMES_FILE);
++		DBG_MSG(szGlobal);
++		pFile = fopen(szGlobal, "r");
++		if (pFile != NULL) {
++			return pFile;
++		}
++		werr(0, "I can not open your fontnames file.\n"
++			"It is not in ANTIWORDHOME nor in '%s'.", szGlobal);
++		return NULL;
++	}
++#endif /* __amigaos */
++
+ 	/* Try the environment version of the fontnames file */
+ 	szAntiword = szGetAntiwordDirectory();
+ 	if (szAntiword != NULL && szAntiword[0] != '\0') {
+diff -ru -x .git antiword/misc.c aw-edit/misc.c
+--- a/misc.c	2026-11-16 21:52:49.646187127 +0000
++++ b/misc.c	2026-11-16 21:54:54.062813071 +0000
+@@ -46,6 +46,9 @@
+ 	if (szHome == NULL || szHome[0] == '\0') {
+ #if defined(N_PLAT_NLM)
+ 		szHome = "SYS:";
++#elif defined(__amigaos)
++		/* AmigaOS has no home directory: no local files, no warning */
++		szHome = "";
+ #elif defined(__dos)
+ 		szHome = "C:";
+ #else
+diff -ru -x .git antiword/options.c aw-edit/options.c
+--- a/options.c	2026-11-16 21:52:49.646187127 +0000
++++ b/options.c	2026-11-16 21:54:54.063224744 +0000
+@@ -198,6 +198,52 @@
+ 	/* Set length */
+ 	tFilenameLen = strlen(szLeafname) + strlen(szSuffix);
+ 
++#if defined(__amigaos)
++	/* AmigaDOS paths: ANTIWORDHOME, HOME/.antiword, then the global one */
++	{
++		char	szLeaf[PATH_MAX+1], szDir[PATH_MAX+1];
++
++		if (strlen(szLeafname) + strlen(szSuffix) >= sizeof(szLeaf)) {
++			werr(0, "Mappingfilename too long, ignored");
++			return NULL;
++		}
++		sprintf(szLeaf, "%s%s", szLeafname, szSuffix);
++		szAntiword = szGetAntiwordDirectory();
++		if (szAntiword != NULL && szAntiword[0] != '\0' &&
++		    bAmigaJoin(szMappingFile, sizeof(szMappingFile),
++				szAntiword, szLeaf)) {
++			DBG_MSG(szMappingFile);
++			pFile = fopen(szMappingFile, "r");
++			if (pFile != NULL) {
++				return pFile;
++			}
++		}
++		szHome = szGetHomeDirectory();
++		if (szHome[0] != '\0' &&
++		    bAmigaJoin(szDir, sizeof(szDir), szHome, ANTIWORD_DIR) &&
++		    bAmigaJoin(szMappingFile, sizeof(szMappingFile),
++				szDir, szLeaf)) {
++			DBG_MSG(szMappingFile);
++			pFile = fopen(szMappingFile, "r");
++			if (pFile != NULL) {
++				return pFile;
++			}
++		}
++		if (bAmigaJoin(szMappingFile, sizeof(szMappingFile),
++				GLOBAL_ANTIWORD_DIR, szLeaf)) {
++			DBG_MSG(szMappingFile);
++			pFile = fopen(szMappingFile, "r");
++			if (pFile != NULL) {
++				return pFile;
++			}
++		}
++		werr(0, "I can't open your mapping file (%s)\n"
++			"It is not in ANTIWORDHOME nor in '"
++			GLOBAL_ANTIWORD_DIR "'.", szLeaf);
++		return NULL;
++	}
++#endif /* __amigaos */
++
+ 	/* Try the environment version of the mapping file */
+ 	szAntiword = szGetAntiwordDirectory();
+ 	if (szAntiword != NULL && szAntiword[0] != '\0') {
