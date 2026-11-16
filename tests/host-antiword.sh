@@ -12,6 +12,9 @@
 set -eu
 # a step that stops the script says which one, in the build log
 trap 'rc=$?; [ $rc = 0 ] || echo "host-antiword.sh: stopped (exit $rc), last step: ${STEP:-start}"' EXIT
+# AmigaOS has no locale variables: a UTF-8 locale on the build machine would
+# switch the PC builds to UTF-8 output (no PostScript or PDF with it)
+LC_ALL=C; LANG=C; export LC_ALL LANG; unset LC_CTYPE LANGUAGE 2>/dev/null || true
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 . "$HERE/antiword.lock"
 . "$HERE/scripts/aw-common.sh"
